@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Automated Fire Robot – Expense Tracker</title>
+<style>
+:root{--bg:#f3f1ee;--card:#fff;--ink:#1d1f23;--mute:#6a6f78;--line:#dcd8d2;--acc:#c8381a;--acc2:#fbe9e4;--ok:#1f7a4d;--bad:#b3261e}
+@media(prefers-color-scheme:dark){:root{--bg:#17181b;--card:#222428;--ink:#ecebe8;--mute:#9a9ea6;--line:#34373c;--acc:#ff6a45;--acc2:#3a2520;--ok:#5cc28d;--bad:#ff8a80}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;padding:0 14px 60px}
+.wrap{max-width:1000px;margin:0 auto}
+h1{font-size:clamp(28px,6vw,46px);line-height:1.1;margin:28px 0 4px;text-align:center;letter-spacing:-.5px;color:var(--acc)}
+.sub{text-align:center;color:var(--mute);margin:0 0 22px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:18px;margin-bottom:18px}
+h2{font-size:18px;margin:0 0 12px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px}
+label{display:block;font-size:14px;color:var(--mute);margin-bottom:4px}
+input,select{width:100%;padding:10px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink);font:inherit}
+input:focus,select:focus,button:focus-visible{outline:2px solid var(--acc);outline-offset:1px}
+.full{grid-column:1/-1}
+.checks{display:flex;flex-wrap:wrap;gap:8px}
+.checks label{display:flex;align-items:center;gap:6px;color:var(--ink);background:var(--acc2);padding:6px 10px;border-radius:6px;margin:0;cursor:pointer}
+.checks input{width:auto}
+button{font:inherit;padding:10px 16px;border-radius:6px;border:1px solid var(--acc);background:var(--acc);color:#fff;cursor:pointer}
+button.ghost{background:transparent;color:var(--acc)}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+.tw{overflow-x:auto}
+table{width:100%;border-collapse:collapse;min-width:820px;font-size:14px}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+th{background:var(--acc2);font-weight:600}
+td.n,th.n{text-align:right}
+.yes{color:var(--ok);font-weight:600}.no{color:var(--bad);font-weight:600}
+.x{padding:3px 9px;font-size:13px}
+.sum{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px}
+.sum div{border:1px solid var(--line);border-radius:8px;padding:10px}
+.sum b{display:block;font-size:20px}
+.sum span{color:var(--mute);font-size:13px}
+.hide{display:none}
+.empty{color:var(--mute);padding:16px 0}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>Automated Fire Robot</h1>
+<p class="sub">Project expense tracker</p>
+
+<div class="card">
+<h2>Group members</h2>
+<div class="grid" id="members"></div>
+</div>
+
+<div class="card">
+<h2>Add expense</h2>
+<div class="grid">
+<div><label for="date">Date</label><input type="date" id="date"></div>
+<div><label for="place">Where was it spent (shop / website)</label><input id="place" placeholder="e.g. Lamington Road shop"></div>
+<div><label for="amount">Amount (₹)</label><input type="number" id="amount" min="0" step="0.01" inputmode="decimal"></div>
+<div><label for="loc">Location</label><input id="loc" placeholder="e.g. Mumbai, Online"></div>
+<div class="full"><label for="item">What was it for</label><input id="item" placeholder="e.g. Flame sensor, delivery charges"></div>
+<div><label for="payer">Paid by</label><select id="payer"></select></div>
+<div><label for="all">Did everyone give their share?</label>
+<select id="all"><option value="yes">Yes</option><option value="no">No</option></select></div>
+<div class="full hide" id="notPaidBox"><label>Who has not paid?</label><div class="checks" id="notPaid"></div></div>
+</div>
+<div class="row"><button id="add">Save expense</button></div>
+</div>
+
+<div class="card">
+<h2>Summary</h2>
+<div class="sum" id="sum"></div>
+</div>
+
+<div class="card">
+<h2>All expenses</h2>
+<div class="tw"><table>
+<thead><tr><th>Date</th><th>Place</th><th>Location</th><th>For</th><th class="n">Amount (₹)</th><th>Paid by</th><th>Everyone paid?</th><th></th></tr></thead>
+<tbody id="rows"></tbody>
+</table></div>
+<div class="empty hide" id="empty">No expenses yet. Add the first one above.</div>
+<div class="row">
+<button class="ghost" id="csv">Download CSV</button>
+<button class="ghost" id="bak">Backup (JSON)</button>
+<button class="ghost" id="imp">Restore backup</button>
+<input type="file" id="file" accept=".json" class="hide">
+</div>
+<p class="sub" style="text-align:left;margin-top:12px">Data is saved in this browser only. To share with the team, download a backup and send it to them, or use the CSV.</p>
+</div>
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+const KEY="afr_expenses_v1",MKEY="afr_members_v2";
+let data=[],members=["Omkar","Vinayak","Niraj","Karthik"];
+function load(){try{data=JSON.parse(localStorage.getItem(KEY))||[]}catch(e){data=[]}
+try{const m=JSON.parse(localStorage.getItem(MKEY));if(Array.isArray(m)&&m.length===4)members=m}catch(e){}}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(data));localStorage.setItem(MKEY,JSON.stringify(members))}catch(e){alert("Could not save in this browser.")}}
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const fmt=n=>"₹"+Number(n).toLocaleString("en-IN",{maximumFractionDigits:2});
+
+function drawMembers(){
+$("members").innerHTML=members.map((m,i)=>`<div><label>Name ${i+1}</label><input data-i="${i}" value="${esc(m)}"></div>`).join("");
+document.querySelectorAll("#members input").forEach(inp=>inp.addEventListener("change",e=>{
+const old=members[+e.target.dataset.i],nu=e.target.value.trim()||old;
+data.forEach(d=>{if(d.payer===old)d.payer=nu;d.notPaid=d.notPaid.map(x=>x===old?nu:x)});
+members[+e.target.dataset.i]=nu;save();drawAll()}));
+}
+function drawForm(){
+const cur=$("payer").value;
+$("payer").innerHTML=members.map(m=>`<option>${esc(m)}</option>`).join("");
+if(members.includes(cur))$("payer").value=cur;
+$("notPaid").innerHTML=members.map(m=>`<label><input type="checkbox" value="${esc(m)}"> ${esc(m)}</label>`).join("");
+}
+function drawTable(){
+$("empty").classList.toggle("hide",data.length>0);
+$("rows").innerHTML=[...data].sort((a,b)=>b.date.localeCompare(a.date)).map(d=>`<tr>
+<td>${esc(d.date)}</td><td>${esc(d.place)}</td><td>${esc(d.loc)}</td><td>${esc(d.item)}</td>
+<td class="n">${fmt(d.amount)}</td><td>${esc(d.payer)}</td>
+<td>${d.all?'<span class="yes">Yes</span>':'<span class="no">No</span><br>Not paid: '+esc(d.notPaid.join(", ")||"-")}</td>
+<td><button class="ghost x" data-id="${d.id}">Delete</button></td></tr>`).join("");
+document.querySelectorAll("#rows button").forEach(b=>b.onclick=()=>{
+if(confirm("Delete this expense?")){data=data.filter(d=>d.id!==b.dataset.id);save();drawAll()}});
+}
+function drawSum(){
+const total=data.reduce((s,d)=>s+d.amount,0);
+const pending=data.filter(d=>!d.all).length;
+let h=`<div><b>${fmt(total)}</b><span>Total spent</span></div><div><b>${data.length}</b><span>Entries</span></div><div><b>${pending}</b><span>Entries with pending payments</span></div>`;
+members.forEach(m=>{const p=data.filter(d=>d.payer===m).reduce((s,d)=>s+d.amount,0);
+const np=data.filter(d=>d.notPaid.includes(m)).length;
+h+=`<div><b>${fmt(p)}</b><span>Paid by ${esc(m)}${np?` · hasn't paid in ${np} entr${np>1?"ies":"y"}`:""}</span></div>`});
+$("sum").innerHTML=h;
+}
+function drawAll(){drawMembers();drawForm();drawTable();drawSum()}
+
+$("all").onchange=()=>$("notPaidBox").classList.toggle("hide",$("all").value==="yes");
+$("add").onclick=()=>{
+const date=$("date").value,amount=parseFloat($("amount").value),place=$("place").value.trim(),loc=$("loc").value.trim(),item=$("item").value.trim();
+if(!date||!place||!(amount>0)||!loc||!item){alert("Fill date, place, amount, location and purpose.");return}
+const all=$("all").value==="yes";
+const notPaid=all?[]:[...document.querySelectorAll("#notPaid input:checked")].map(c=>c.value);
+if(!all&&!notPaid.length){alert("Select who has not paid.");return}
+data.push({id:Date.now()+""+Math.floor(Math.random()*1000),date,place,loc,item,amount,payer:$("payer").value,all,notPaid});
+save();["place","amount","loc","item"].forEach(i=>$(i).value="");$("all").value="yes";$("notPaidBox").classList.add("hide");
+drawAll();
+};
+function dl(name,text,type){const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([text],{type}));a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),500)}
+$("csv").onclick=()=>{const q=s=>'"'+String(s).replace(/"/g,'""')+'"';
+const r=[["Date","Place","Location","For","Amount","Paid by","Everyone paid","Not paid by"].join(",")]
+.concat(data.map(d=>[d.date,d.place,d.loc,d.item,d.amount,d.payer,d.all?"Yes":"No",d.notPaid.join("; ")].map(q).join(",")));
+dl("fire-robot-expenses.csv","\ufeff"+r.join("\n"),"text/csv")};
+$("bak").onclick=()=>dl("fire-robot-backup.json",JSON.stringify({members,data}),"application/json");
+$("imp").onclick=()=>$("file").click();
+$("file").onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();
+r.onload=()=>{try{const o=JSON.parse(r.result);if(!Array.isArray(o.data)||!Array.isArray(o.members)||o.members.length!==4)throw 0;
+if(confirm("This will replace the current data. Continue?")){data=o.data;members=o.members;save();drawAll()}}catch(x){alert("Invalid backup file.")}};
+r.readAsText(f);e.target.value=""};
+
+load();$("date").valueAsDate=new Date();drawAll();
+</script>
+</body>
+</html>
